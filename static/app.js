@@ -76,7 +76,7 @@ function drawFaces(result) {
     const width = w * scale;
     const height = h * scale;
 
-    ctx.strokeStyle = "#3b82f6";
+    ctx.strokeStyle = "#47b300";
     ctx.lineWidth = 3;
     ctx.strokeRect(left, top, width, height);
 
@@ -87,7 +87,7 @@ function drawFaces(result) {
     const labelX = left + width / 2 - textWidth / 2 - 10;
     const labelY = Math.max(0, top - 40);
 
-    ctx.fillStyle = "#3b82f6";
+    ctx.fillStyle = "#47b300";
     ctx.fillRect(labelX, labelY, textWidth + 20, 32);
     ctx.fillStyle = "#fff";
     ctx.fillText(label, labelX + 10, labelY + 23);
