@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Live Emotion</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -11,16 +12,47 @@
   <canvas id="overlay"></canvas>
 
   <div id="panel">
+    <div id="user-row">
+      <span id="user-name"></span>
+      <button id="exit-btn" type="button">Exit</button>
+    </div>
     <div id="top-emotion">No face</div>
     <div id="scores"></div>
+    <div id="models"></div>
+    <div id="latency">-- ms</div>
   </div>
 
-  <div id="start-screen">
-    <h1>Live Emotion</h1>
-    <p>Turn on your camera to see your facial emotion live.</p>
-    <button id="start-btn">Start camera</button>
-    <p id="error"></p>
-  </div>
+  <form id="start-screen" autocomplete="off">
+    <h1>Live Emotion(A Project By bibekjena.dev)</h1>
+    <p>Enter your name, accept the terms, and we'll track your facial emotion live.</p>
+
+    <label for="name-input" class="field-label">Your name</label>
+    <input id="name-input" name="name" maxlength="40" placeholder="e.g. Bibek" value="{{ name }}" required>
+
+    <div id="terms" tabindex="0" aria-label="Terms and Conditions">
+      <h2>Terms &amp; Conditions <span>(version {{ terms_version }})</span></h2>
+      <ol>
+        <li>This site uses your camera to detect faces and predict facial emotions in real time.</li>
+        <li>While a face is in view, a picture of your face is saved about once per second, together with
+            your name, the time and the predicted emotions.</li>
+        <li>These pictures and predictions are stored on this server and may be used to review and
+            improve the emotion models.</li>
+        <li>Predictions come from machine-learning models and can be wrong. A facial expression doesn't
+            always show what someone actually feels, so don't use the results to make decisions about anyone.</li>
+        <li>Only use your own face, or the face of someone who has also agreed to these terms.</li>
+        <li>You can stop at any time with the Exit button. To have your saved pictures deleted, contact
+            the site owner with the name you entered.</li>
+      </ol>
+    </div>
+
+    <label id="accept-row">
+      <input id="accept-input" type="checkbox">
+      I have read and accept the Terms &amp; Conditions
+    </label>
+
+    <button id="start-btn" type="submit" disabled>Go</button>
+    <p id="error" role="alert"></p>
+  </form>
 
   <script>const CLASSES = {{ classes|tojson }};</script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
