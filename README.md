@@ -20,3 +20,13 @@ Notes:
 - The camera only works on `localhost` or over HTTPS.
 - Use `opencv-python-headless` 4.x. OpenCV 5 no longer ships the face detector file this app uses.
 - The model can be wrong. A facial expression doesn't always show what someone actually feels.
+
+## Saved captures
+
+While a face is in view, one frame per second is saved (change with the `SAVE_INTERVAL` env var, in seconds).
+
+- Images go to `captures/`, numbered in order: `000001.jpg`, `000002.jpg`, ...
+- Each image has a row in the SQLite database `data/emotions.db` (table `captures`) with the emotion, confidence, all face scores/boxes and the time.
+- `GET /captures?limit=50` lists the newest captures as JSON; `GET /captures/000001.jpg` returns an image.
+
+Both folders are created on first run and are ignored by git.

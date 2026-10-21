@@ -29,52 +29,73 @@ document.getElementById("start-btn").addEventListener("click", async () => {
     await video.play();
     startScreen.style.display = "none";
     detectLoop();
+    renderLoop();
   } catch (err) {
     document.getElementById("error").textContent = "Could not open the camera: " + err.message;
   }
 });
 
-async function detectLoop() {
+// latest server result, and the boxes currently on screen (eased toward the result every frame)
+let latest = null;
+let shown = [];
+
+function grabFrame() {
   // send a smaller copy of the frame, it's faster and good enough for detection
   const scale = 640 / video.videoWidth;
   frameCanvas.width = 640;
-  frameCanvas.height = video.videoHeight * scale;
+  frameCanvas.height = Math.round(video.videoHeight * scale);
   frameCanvas.getContext("2d").drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+  return new Promise((resolve) => frameCanvas.toBlob(resolve, "image/jpeg", 0.75));
+}
 
-  try {
-    const response = await fetch("/predict", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: frameCanvas.toDataURL("image/jpeg", 0.8) }),
-    });
-    const result = await response.json();
-    drawFaces(result);
-    updatePanel(result.faces[0]);
-  } catch (err) {
-    console.error(err);
+async function detectLoop() {
+  // one request in flight at a time; the next one starts as soon as this one returns
+  while (true) {
+    try {
+      const response = await fetch("/predict", {
+        method: "POST",
+        headers: { "Content-Type": "image/jpeg" },
+        body: await grabFrame(),
+      });
+      const result = await response.json();
+      if (result.faces) {
+        latest = result;
+        updatePanel(result.faces[0]);
+      }
+    } catch (err) {
+      console.error(err);
+      await new Promise((r) => setTimeout(r, 500));
+    }
   }
+}
 
-  setTimeout(detectLoop, 50);
+function renderLoop() {
+  if (overlay.width !== window.innerWidth || overlay.height !== window.innerHeight) {
+    overlay.width = window.innerWidth;
+    overlay.height = window.innerHeight;
+  }
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  if (latest) drawFaces(latest);
+  requestAnimationFrame(renderLoop);
 }
 
 function drawFaces(result) {
-  overlay.width = window.innerWidth;
-  overlay.height = window.innerHeight;
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
-
   // the video is shown with object-fit: cover, so scale and crop the same way
   const scale = Math.max(overlay.width / result.width, overlay.height / result.height);
   const offsetX = (overlay.width - result.width * scale) / 2;
   const offsetY = (overlay.height - result.height * scale) / 2;
 
-  for (const face of result.faces) {
+  shown = result.faces.map((face, i) => {
     let [x, y, w, h] = face.box;
     x = result.width - x - w; // video is mirrored
+    const target = [offsetX + x * scale, offsetY + y * scale, w * scale, h * scale];
+    const prev = shown[i];
+    // ease toward the newest box so it moves smoothly between predictions
+    return prev ? prev.map((v, k) => v + (target[k] - v) * 0.35) : target;
+  });
 
-    const left = offsetX + x * scale;
-    const top = offsetY + y * scale;
-    const width = w * scale;
-    const height = h * scale;
+  result.faces.forEach((face, i) => {
+    const [left, top, width, height] = shown[i];
 
     ctx.strokeStyle = "#47b300";
     ctx.lineWidth = 3;
@@ -91,7 +112,7 @@ function drawFaces(result) {
     ctx.fillRect(labelX, labelY, textWidth + 20, 32);
     ctx.fillStyle = "#fff";
     ctx.fillText(label, labelX + 10, labelY + 23);
-  }
+  });
 }
 
 function updatePanel(face) {
