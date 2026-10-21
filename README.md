@@ -35,6 +35,12 @@ Open `http://127.0.0.1:5000` and check `http://127.0.0.1:5000/health`.
 
 Browser camera access normally requires HTTPS, except on `localhost`. To use the camera from a phone, deploy behind HTTPS with a valid certificate or secure tunnel. A phone opening a plain `http://192.168.x.x:5000` address may not be allowed to use the camera. Do not expose Flask's development server directly to the public internet; use a production WSGI server and HTTPS for deployment.
 
+## Live emotion detection
+
+Press **Start camera**, then **Start live detect**. Frames are sent continuously to `/api/predict_live`, faces are found with OpenCV's Haar cascade, each face is classified, and a box with its label is drawn over the video. The results panel shows the largest face. Press **Stop live detect** to stop.
+
+Note: use `opencv-python-headless` 4.x — OpenCV 5 no longer bundles the Haar cascade files.
+
 ## API
 
 ```bash

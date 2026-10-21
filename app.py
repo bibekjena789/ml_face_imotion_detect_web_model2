@@ -3,6 +3,8 @@
 import os, io, base64
 from pathlib import Path
 
+import cv2
+import numpy as np
 import torch
 import torch.nn as nn
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -23,6 +25,10 @@ mean = (0.485, 0.456, 0.406)
 std = (0.229, 0.224, 0.225)
 preprocess = None
 model_error = None
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+if face_cascade.empty():
+    print("[FACE] Haar cascade failed to load; whole frames will be classified.")
+    face_cascade = None
 
 
 def load_model():
@@ -55,23 +61,74 @@ def load_model():
 load_model()
 
 
-def predict_image(image):
+def decode_image(data):
+    if "," in data and data.split(",", 1)[0].startswith("data:"):
+        data = data.split(",", 1)[1]
+    return Image.open(io.BytesIO(base64.b64decode(data, validate=True)))
+
+
+def detect_faces(image, max_faces=5):
+    """Return face boxes (x, y, w, h) in image pixels, largest first, padded for context."""
+    if face_cascade is None:
+        return []
+    gray = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2GRAY)
+    gray = cv2.equalizeHist(gray)
+    min_side = max(40, min(gray.shape) // 10)
+    found = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=6, minSize=(min_side, min_side))
+    W, H = image.size
+    boxes = []
+    for x, y, w, h in sorted((tuple(int(v) for v in f) for f in found), key=lambda b: b[2] * b[3], reverse=True)[:max_faces]:
+        pad = int(0.15 * w)
+        x0, y0 = max(0, x - pad), max(0, y - pad)
+        x1, y1 = min(W, x + w + pad), min(H, y + h + pad)
+        boxes.append((x0, y0, x1 - x0, y1 - y0))
+    return boxes
+
+
+def classify(crops):
     if model is None or preprocess is None:
         raise RuntimeError(model_error or "Model is not loaded.")
-    image = ImageOps.exif_transpose(image).convert("RGB")
-    x = preprocess(image).unsqueeze(0).to(DEVICE)
+    x = torch.stack([preprocess(c) for c in crops]).to(DEVICE)
     with torch.inference_mode():
-        probs = torch.softmax(model(x), dim=1)[0]
-    idx = int(probs.argmax().item())
-    return {"emotion": class_names[idx], "confidence": round(float(probs[idx]), 6),
-            "probabilities": {name: round(float(probs[i]), 6) for i, name in enumerate(class_names)},
-            "device": str(DEVICE),
-            "note": "Model estimate only; it does not reliably establish a person's inner emotional state."}
+        probs = torch.softmax(model(x), dim=1).cpu()
+    results = []
+    for p in probs:
+        idx = int(p.argmax().item())
+        results.append({"emotion": class_names[idx], "confidence": round(float(p[idx]), 6),
+                        "probabilities": {name: round(float(p[i]), 6) for i, name in enumerate(class_names)}})
+    return results
+
+
+def predict_image(image):
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    boxes = detect_faces(image, max_faces=1)
+    crop = image.crop((boxes[0][0], boxes[0][1], boxes[0][0] + boxes[0][2], boxes[0][1] + boxes[0][3])) if boxes else image
+    result = classify([crop])[0]
+    result.update({"face_box": list(boxes[0]) if boxes else None, "face_found": bool(boxes), "device": str(DEVICE),
+                   "note": "Model estimate only; it does not reliably establish a person's inner emotional state."})
+    return result
+
+
+def predict_faces(image):
+    image = image.convert("RGB")
+    boxes = detect_faces(image)
+    faces = []
+    if boxes:
+        crops = [image.crop((x, y, x + w, y + h)) for x, y, w, h in boxes]
+        for box, res in zip(boxes, classify(crops)):
+            res["box"] = list(box)
+            faces.append(res)
+    return {"faces": faces, "width": image.size[0], "height": image.size[1], "device": str(DEVICE)}
 
 
 @app.get("/")
 def index():
     return render_template("index.html", model_ready=model is not None, model_error=model_error)
+
+
+@app.get("/live")
+def live_page():
+    return render_template("live.html", model_ready=model is not None, model_error=model_error, classes=class_names)
 
 
 @app.get("/health")
@@ -90,10 +147,7 @@ def api_predict():
                 return jsonify({"error": "Choose an image first."}), 400
             image = Image.open(file.stream)
         elif request.is_json and request.json and request.json.get("image"):
-            data = request.json["image"]
-            if "," in data and data.split(",", 1)[0].startswith("data:"):
-                data = data.split(",", 1)[1]
-            image = Image.open(io.BytesIO(base64.b64decode(data, validate=True)))
+            image = decode_image(request.json["image"])
         else:
             return jsonify({"error": "Send an image using the image field."}), 400
         return jsonify(predict_image(image))
@@ -104,6 +158,23 @@ def api_predict():
     except Exception as exc:
         app.logger.exception("Prediction failed")
         return jsonify({"error": f"Prediction failed: {type(exc).__name__}: {exc}"}), 500
+
+
+@app.post("/api/predict_live")
+def api_predict_live():
+    """Detect every face in a live camera frame and classify each one."""
+    if model is None:
+        return jsonify({"error": model_error or "Model not loaded"}), 503
+    data = request.get_json(silent=True) or {}
+    if not data.get("image"):
+        return jsonify({"error": "Send a frame as a base64 data URL in the image field."}), 400
+    try:
+        return jsonify(predict_faces(decode_image(data["image"])))
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        return jsonify({"error": f"Invalid frame: {exc}"}), 400
+    except Exception as exc:
+        app.logger.exception("Live prediction failed")
+        return jsonify({"error": f"Live prediction failed: {type(exc).__name__}: {exc}"}), 500
 
 
 @app.errorhandler(413)
