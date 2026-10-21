@@ -321,5 +321,56 @@ def face_image(filename):
     return send_from_directory(FACE_DIR, filename)
 
 
+def ssl_files():
+    """Create a self-signed certificate once, so the camera also works when the site is opened from another device.
+
+    Browsers only allow the camera on https:// pages or on http://localhost.
+    """
+    cert_path, key_path = BASE_DIR / "data" / "cert.pem", BASE_DIR / "data" / "key.pem"
+    if cert_path.exists() and key_path.exists():
+        return str(cert_path), str(key_path)
+
+    import ipaddress
+    import socket
+    from datetime import timedelta, timezone
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    ips = {"127.0.0.1"}
+    try:
+        ips.update(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        pass
+    names = [x509.DNSName("localhost"), x509.DNSName(socket.gethostname())]
+    names += [x509.IPAddress(ipaddress.ip_address(ip)) for ip in sorted(ips)]
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Live Emotion (local)")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject).issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=825))
+        .add_extension(x509.SubjectAlternativeName(names), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(key.private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption(),
+    ))
+    return str(cert_path), str(key_path)
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), threaded=True)
+    port = int(os.environ.get("PORT", 5000))
+    use_https = os.environ.get("HTTPS", "1") != "0"
+    if use_https:
+        print(f"Open https://127.0.0.1:{port} (or https://<this computer's IP>:{port} from another device).")
+        print("The certificate is self-signed: click Advanced -> Proceed the first time.")
+    app.run(host="0.0.0.0", port=port, threaded=True, ssl_context=ssl_files() if use_https else None)

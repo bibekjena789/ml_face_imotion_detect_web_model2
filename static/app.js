@@ -56,6 +56,13 @@ startScreen.addEventListener("submit", async (event) => {
     visitorName = data.name;
     userName.textContent = visitorName;
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      // browsers hide the camera on plain http:// pages, except on localhost
+      const secureUrl = location.href.replace(/^http:/, "https:");
+      throw new Error(window.isSecureContext
+        ? "This browser doesn't support camera access."
+        : `The camera only works over https. Open ${secureUrl} instead.`);
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
     video.srcObject = stream;
     await video.play();

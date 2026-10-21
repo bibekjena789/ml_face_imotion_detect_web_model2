@@ -17,10 +17,15 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open http://127.0.0.1:5000, enter your name, accept the terms and click **Go**.
+Open https://127.0.0.1:5000, enter your name, accept the terms and click **Go**.
+From a phone or another computer, use `https://<this computer's IP>:5000`.
+
+The app serves HTTPS with a self-signed certificate it creates in `data/` on first run, so the browser
+shows a warning once: click **Advanced → Proceed**. Set `HTTPS=0` to serve plain http instead.
 
 Notes:
-- The camera only works on `localhost` or over HTTPS.
+- Browsers only allow the camera over HTTPS or on `localhost`. On plain `http://<IP>` you'd get
+  "Cannot read properties of undefined (reading 'getUserMedia')".
 - Use `opencv-python-headless` 4.x. OpenCV 5 no longer ships the face detector file this app uses.
 - The model can be wrong. A facial expression doesn't always show what someone actually feels.
 
