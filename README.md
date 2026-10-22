@@ -33,7 +33,7 @@ Notes:
 
 Faces are found with OpenCV, then each face goes through both models and their scores are averaged
 (`EFFNET_WEIGHT`, default `0.5`, sets EfficientNet's share). A frame takes about 70 ms on CPU,
-well under the 500 ms target. The panel shows the time in red if a frame takes longer than 500 ms.
+well under the 700 ms target. The panel shows the time in red if a frame takes longer than 700 ms.
 
 ## Saved faces
 

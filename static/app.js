@@ -12,7 +12,7 @@ const scoresBox = document.getElementById("scores");
 const modelsBox = document.getElementById("models");
 const latencyBox = document.getElementById("latency");
 
-const LATENCY_TARGET_MS = 500;
+const LATENCY_TARGET_MS = 700;
 
 // small canvas used to grab frames before sending them to the server
 const frameCanvas = document.createElement("canvas");
